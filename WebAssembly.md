@@ -130,10 +130,10 @@ A *linear memory* is a contiguous, [byte]-addressable, readable and writable
 range of memory spanning from offset `0` and extending up to a *linear-memory
 size*, allocated as part of a WebAssembly instance. The size of a linear memory
 is always a multiple of the [page] size and may be increased dynamically (with
-the [`mem.grow`](#grow-memory) instruction) up to an optional declared
-*maximum length*. Linear memories are sandboxed, so they don't overlap with each
-other or with other parts of a WebAssembly instance, including the call stack,
-globals, and tables, and their bounds are enforced.
+the [`memory.grow`](#grow-linear-memory-size) instruction) up to an optional
+declared *maximum length*. Linear memories are sandboxed, so they don't overlap
+with each other or with other parts of a WebAssembly instance, including the
+call stack, globals, and tables, and their bounds are enforced.
 
 Linear memories can either be [defined by a module](#linear-memory-section)
 or [imported](#import-section).
@@ -723,11 +723,11 @@ The Code Section consists of an [array] of function bodies.
 
 A *function body* consists of:
 
-| Field Name      | Type                       | Description                       |
-| --------------- | -------------------------- | --------------------------------- |
-| `body_size`     | [varuint32]                | the size of `body` in bytes       |
-| `locals`        | [array] of local entry     | local variable declarations       |
-| `body`          | sequence of [instructions] | the instructions                  |
+| Field Name      | Type                       | Description                                       |
+| --------------- | -------------------------- | ------------------------------------------------- |
+| `body_size`     | [varuint32]                | the size of `locals` and `instructions`, in bytes |
+| `locals`        | [array] of local entry     | local variable declarations                       |
+| `instructions`  | sequence of [instructions] | the instructions                                  |
 
 A *local entry* consists of:
 
@@ -1294,8 +1294,7 @@ WebAssembly follows IEEE 754-2008, which calls them "subnormal numbers".
 When the result of any instruction in this family (which excludes `neg`, `abs`,
 `copysign`, `load`, `store`, and `const`) is a NaN, the sign bit and the
 significand field (which doesn't include the implicit leading digit of the
-significand) of the NaN are computed by one of the following rules,
-selected [nondeterministically]:
+significand) of the NaN are computed as follows:
 
  - If the instruction has any NaN non-immediate operand values with significand
    fields that have any bits set to `1` other than the most significant bit of
@@ -1311,7 +1310,10 @@ Implementations are permitted to further implement the IEEE 754-2008 section
 "Operations with NaNs" recommendation that operations propagate NaN bits from
 their operands, however it isn't required.
 
-> The NaN propagation rules are intended to support NaN-boxing.
+> The NaN propagation rules are intended to support NaN-boxing. If all inputs
+to an arithmetic operator are "canonical", the result is also "canonical", so
+NaN-boxing implementations don't need to worry about non-"canonical" NaNs
+being generated as a result of arithmetic.
 
 > At present, there is no observable difference between quiet and signaling NaN
 other than the difference in the bit pattern.
@@ -2830,17 +2832,17 @@ the name "wrap".
 
 #### Grow Linear-Memory Size
 
-| Mnemonic    | Opcode | Immediates              | Signature                 | Families |
-| ----------- | ------ | ----------------------- | ------------------------- | -------- |
-| `mem.grow`  | 0x40   | `$reserved`: [varuint1] | `($delta: iPTR) : (iPTR)` | [Z]      |
+| Mnemonic      | Opcode | Immediates              | Signature                 | Families |
+| ------------- | ------ | ----------------------- | ------------------------- | -------- |
+| `memory.grow` | 0x40   | `$reserved`: [varuint1] | `($delta: iPTR) : (iPTR)` | [Z]      |
 
-The `mem.grow` instruction increases the size of the [default linear memory] by
-`$delta`, in units of unsigned [pages]. If the index of any byte of the
+The `memory.grow` instruction increases the size of the [default linear memory]
+by `$delta`, in units of unsigned [pages]. If the index of any byte of the
 referenced linear memory would be unrepresentable as unsigned in an `iPTR`, if
 allocation fails due to insufficient dynamic resources, or if the linear memory
 has a `maximum` length and the actual size would exceed the `maximum` length, it
 returns `-1` and the linear-memory size is not increased; otherwise the
-linear-memory size is increased, and `mem.grow` returns the previous
+linear-memory size is increased, and `memory.grow` returns the previous
 linear-memory size, also as an unsigned value in units of [pages]. Newly
 allocated bytes are initialized to all zeros.
 
@@ -2858,16 +2860,17 @@ valid returns.
 
 > `$reserved` is intended for future use.
 
-> This instruction was previously named `grow_memory`.
+> This instruction was previously named `grow_memory`, and was briefly proposed
+to be named `mem.grow`.
 
 #### Current Linear-Memory Size
 
-| Mnemonic    | Opcode | Immediates              | Signature              | Families |
-| ----------- | ------ | ----------------------- | ---------------------- | -------- |
-| `mem.size`  | 0x3f   | `$reserved`: [varuint1] | `() : (iPTR)`          | [Z]      |
+| Mnemonic      | Opcode | Immediates              | Signature              | Families |
+| ------------- | ------ | ----------------------- | ---------------------- | -------- |
+| `memory.size` | 0x3f   | `$reserved`: [varuint1] | `() : (iPTR)`          | [Z]      |
 
-The `mem.size` instruction returns the size of the [default linear memory], as
-an unsigned value in units of [pages].
+The `memory.size` instruction returns the size of the [default linear memory],
+as an unsigned value in units of [pages].
 
 **Validation**:
  - [Linear-memory size validation](#linear-memory-size-validation) is required.
@@ -2875,7 +2878,8 @@ an unsigned value in units of [pages].
 
 > `$reserved` is intended for future use.
 
-> This instruction was previously named `current_memory`.
+> This instruction was previously named `current_memory` and was briefly
+proposed to be named `mem.size`.
 
 
 Instantiation
@@ -3171,18 +3175,18 @@ TODO: Describe the text format.
 [two's complement sum]: https://en.wikipedia.org/wiki/Two%27s_complement#Addition
 [value type]: #value-types
 [value types]: #value-types
-[uint32]: #primitive-type-encodings
+[uint32]: #primitive-encoding-types
 [UTF-8]: https://en.wikipedia.org/wiki/UTF-8
 [valid UTF-8]: https://encoding.spec.whatwg.org/#utf-8-decode-without-bom-or-fail
-[varuint1]: #primitive-type-encodings
-[varuint7]: #primitive-type-encodings
-[varuint32]: #primitive-type-encodings
-[varuint64]: #primitive-type-encodings
-[varsint7]: #primitive-type-encodings
-[varsint32]: #primitive-type-encodings
-[varsint64]: #primitive-type-encodings
-[float32]: #primitive-type-encodings
-[float64]: #primitive-type-encodings
+[varuint1]: #primitive-encoding-types
+[varuint7]: #primitive-encoding-types
+[varuint32]: #primitive-encoding-types
+[varuint64]: #primitive-encoding-types
+[varsint7]: #primitive-encoding-types
+[varsint32]: #primitive-encoding-types
+[varsint64]: #primitive-encoding-types
+[float32]: #primitive-encoding-types
+[float64]: #primitive-encoding-types
 [`$args`]: #named-values
 [`$returns`]: #named-values
 [`$any`]: #named-values
